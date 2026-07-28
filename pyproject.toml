@@ -1,0 +1,20 @@
+[project]
+name = "hl-vision"
+version = "0.1.0"
+description = "Visão do RoboCIn Humanoid — treino e avaliação de detectores (YOLO26) no HSLVision"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # ultralytics puxa torch/torchvision. Sem pin de índice: a wheel default
+    # do PyPI já vem com CUDA recente, o que cobre tanto A100/RTX3090 do
+    # Apuana quanto Blackwell (sm_120) em desktop. Não fixe um índice cu12x
+    # aqui sem necessidade — quebra um dos dois lados.
+    "ultralytics>=8.3",
+    "huggingface-hub>=0.26",
+    "datasets>=3.0",
+    "pillow>=10.0",
+    "tqdm>=4.66",
+    # export ONNX (o engine TensorRT é gerado na Jetson, nunca aqui)
+    "onnx>=1.17",
+    "onnxslim",
+]

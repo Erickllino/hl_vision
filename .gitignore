@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Dados, saídas de treino e logs — pesados, ficam fora do git
+data/*
+!data/.gitkeep
+runs/
+logs/*
+!logs/.gitkeep
+
+# Pesos baixados pela ultralytics no cwd
+*.pt
+*.onnx
