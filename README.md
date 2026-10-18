@@ -1,8 +1,27 @@
 # hl_vision
 
 Treino e avaliação de detectores de objetos para a visão do RoboCIn Humanoid
-(Booster T1), no dataset **HSLVision**. O protocolo de decisão está em
-[`plano_de_testes.md`](plano_de_testes.md).
+(Booster T1). O dataset local é o **HSLVision**; complementos para bola pequena
+e segmentação estão em avaliação.
+
+## Planejamento e auditoria
+
+- [Ferramentas de avaliação offline](docs/avaliacao_offline.md): comparação futura
+  de modelos e quatro variantes de preprocessamento, sem treinamento; CLI em
+  `tools/evaluate.py`, core C++ compartilhado com `hsl-player` via CMake.
+
+- [Plano experimental](plano_de_testes.md): dados, resoluções retangulares,
+  treinamento, avaliação no robô e contrato de integração com o hsl-player.
+- [Pesquisa de datasets Booster T1/HSL](docs/datasets_booster_t1_hsl.md):
+  fontes, links de acesso, contagens medidas, limitações e recomendação.
+- [Auditoria local de 2026-10-10](docs/auditoria_2026-10-10.md): ambiente,
+  classes, dados, pesos e problemas encontrados.
+
+**Estado atual:** corrigir o remapeamento de classes do conversor HSLVision,
+revisar os splits por sessão e implementar/verificar shapes retangulares antes
+dos treinos longos. Os scripts e presets abaixo ainda são os do pipeline inicial;
+não implementam integralmente o plano revisado. Não há benchmark de qualidade ou
+latência no T1 que permita selecionar um vencedor.
 
 ## Layout
 
@@ -23,18 +42,19 @@ Treino e avaliação de detectores de objetos para a visão do RoboCIn Humanoid
 Ambiente gerenciado por [uv](https://docs.astral.sh/uv/). Os scripts instalam
 o uv se ele não existir — não é preciso `module load python` nem conda.
 
-## Rodando localmente
+## Pipeline inicial — execução local
 
 ```bash
-./run_local.sh sanity     # yolo26n @640, 50 épocas — valida o pipeline em ~1h
-./run_local.sh            # yolo26s @960, 150 épocas — candidato principal
+./run_local.sh sanity     # preset existente: yolo26n, imgsz=640, 50 épocas
+./run_local.sh            # preset existente: yolo26s, imgsz=960, 150 épocas
 ```
 
 Da primeira vez ele instala as dependências e baixa/converte o dataset para
 `data/`. Interrompeu no meio? Rode de novo: retoma do `last.pt`.
 
-Presets seguem a matriz T1.1 do plano: `sanity` (B), `main` (C), `m960` (D),
-`p2` (E), `s1280` (G). Flags extras passam depois de `--`:
+Presets legados: `sanity`, `main`, `m960`, `p2`, `s1280`.
+Eles não correspondem aos IDs da matriz experimental revisada, e `imgsz`
+escalar não garante entrada retangular. Flags extras passam depois de `--`:
 
 ```bash
 ./run_local.sh main -- --batch 8 --patience 20
@@ -96,9 +116,11 @@ O `--cache ram` do sbatch depende dos 48 G reservados no job; localmente o
 `run_local.sh` usa `--cache disk`, porque o dataset descomprimido não cabe na
 RAM de um desktop.
 
-O export ONNX acontece no fim do treino. **O engine TensorRT deve ser gerado
-na própria Jetson AGX Orin** — engines não são portáveis entre GPUs (Fase 3
-do plano de testes).
+O script solicita export ONNX ao fim de um treino novo; o caminho atual de
+resume retorna antes dessa etapa. **Construir e validar TensorRT no ambiente-alvo
+compatível do robô**, confirmando GPU, JetPack, CUDA e TensorRT. O modelo exato
+da GPU do T1 ainda não foi verificado; os engines existentes não devem ser
+presumidos portáveis para outra GPU/versão.
 
 Documentação do cluster: <https://apuana.cin.ufpe.br> ·
 [helpdesk](https://helpdesk.cin.ufpe.br/servicos/cluster-apuana) ·

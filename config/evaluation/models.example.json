@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "name": "line_segmentor",
+      "weights": "../../Models/your_ultralytics_segmentor.onnx",
+      "task": "segment",
+      "class_map": {"0": 0, "1": 1},
+      "imgsz": [640, 640],
+      "device": "cpu",
+      "conf": 0.001,
+      "iou": 0.7,
+      "max_det": 300,
+      "half": false
+    }
+  ]
+}

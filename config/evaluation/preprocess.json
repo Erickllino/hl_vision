@@ -1,0 +1,7 @@
+{
+  "clip-limit": 2.0,
+  "tile-size": 8,
+  "min-value": 140,
+  "max-saturation": 110,
+  "strength": 0.9
+}

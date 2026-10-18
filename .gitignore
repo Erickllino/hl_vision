@@ -8,6 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+.claude
+
+# env files
+.env
 
 # Dados, saídas de treino e logs — pesados, ficam fora do git
 data/*
@@ -19,3 +23,7 @@ logs/*
 # Pesos baixados pela ultralytics no cwd
 *.pt
 *.onnx
+**.engine
+
+/Models
+/Data
