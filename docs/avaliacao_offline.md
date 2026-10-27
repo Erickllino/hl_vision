@@ -1,6 +1,6 @@
 # Avaliação offline no robô (execução posterior)
 
-Dataset de duas classes: veja [preparação CircleLine / Line](dataset_circleline_line.md)
+Dataset de uma classe `line`: veja [preparação das linhas](dataset_circleline_line.md)
 para obter o NAODevils manual já convertido ao formato deste runner.
 
 Ferramentas para comparar modelos locais e `original`, `clahe`, `white`, `combined` nas mesmas imagens. Não treinam nem baixam pesos. Nenhum benchmark real foi executado nesta implementação. Exemplos em `config/evaluation/` são templates; substitua caminhos, classes, shapes e anotações pelos dados reais.
@@ -26,9 +26,9 @@ O CMake compila diretamente `src/vision/src/model/line_preprocessor.cpp` e inclu
 Manifesto JSON (caminhos relativos ao próprio manifesto, ou absolutos):
 
 ```json
-{"classes":["CircleLine","Line"],"images":[
+{"classes":["line"],"images":[
   {"id":"session01_frame0001","image":"images/frame0001.png",
-   "boxes":[[1,20,30,160,90]],"mask":"masks/frame0001.png"}
+    "boxes":[[0,20,30,160,90]],"mask":"masks/frame0001.png"}
 ]}
 ```
 

@@ -1,127 +1,122 @@
-# hl_vision
+# hl_vision — replay de rosbag no hsl-player
 
-Treino e avaliação de detectores de objetos para a visão do RoboCIn Humanoid
-(Booster T1). O dataset local é o **HSLVision**; complementos para bola pequena
-e segmentação estão em avaliação.
+Esta branch publica os tópicos originais da câmera, que o hsl-player consome como
+se fossem da câmera física. A interface X11 mostra RAW com máscaras/caixas/segmentos e o
+frame pré-processado. O detector usa **K1** por padrão neste replay, sem alterar
+o YAML de produção; a segmentação usa o modelo configurado no `vision.yaml`.
+A branch `fix/vision-preprocess` do hsl-player recebeu suporte pequeno a ajuste
+dinâmico do filtro de segmentação.
 
-## Planejamento e auditoria
+## No robô
 
-- [Ferramentas de avaliação offline](docs/avaliacao_offline.md): comparação futura
-  de modelos e quatro variantes de preprocessamento, sem treinamento; CLI em
-  `tools/evaluate.py`, core C++ compartilhado com `hsl-player` via CMake.
+Pré-requisitos: ROS 2 e workspace do `hsl-player` compilado/sourceado (pacotes
+`vision`, `vision_interface`, `image_transport`); `python3` do ROS com
+`rclpy`, `PyYAML`, `numpy`, `opencv-python`/`python3-opencv`, `Pillow` e Tkinter.
+Para MCAP sem o plugin ROS `rosbag2_storage_mcap`, instale `python3 -m pip
+install --user mcap` (fallback Python; aceita um único arquivo MCAP na bag).
+Instale esses módulos no **mesmo Python usado pelo ROS**; não use o `uv.lock`
+legado de treinamento para executar o replay. Precisa de `ros2 bag play` e
+acesso aos engines/ONNX compatíveis com a GPU do robô. Copie a bag inteira
+para `data/minha_bag/` (diretório com `metadata.yaml` e arquivos de armazenamento).
 
-- [Plano experimental](plano_de_testes.md): dados, resoluções retangulares,
-  treinamento, avaliação no robô e contrato de integração com o hsl-player.
-- [Pesquisa de datasets Booster T1/HSL](docs/datasets_booster_t1_hsl.md):
-  fontes, links de acesso, contagens medidas, limitações e recomendação.
-- [Auditoria local de 2026-10-10](docs/auditoria_2026-10-10.md): ambiente,
-  classes, dados, pesos e problemas encontrados.
-
-**Estado atual:** corrigir o remapeamento de classes do conversor HSLVision,
-revisar os splits por sessão e implementar/verificar shapes retangulares antes
-dos treinos longos. Os scripts e presets abaixo ainda são os do pipeline inicial;
-não implementam integralmente o plano revisado. Não há benchmark de qualidade ou
-latência no T1 que permita selecionar um vencedor.
-
-## Layout
-
-```
-.
-├── run_local.sh             # roda tudo na sua máquina (sem SLURM)
-├── setup_env.sh             # prepara o ambiente no cluster Apuana
-├── train_yolo26.sbatch      # job SLURM
-├── src/
-│   ├── paths.py             # caminhos do repo (data/, runs/, logs/)
-│   ├── prepare_hslvision.py # baixa o HSLVision e converte p/ formato YOLO
-│   └── train_yolo26.py      # fine-tuning
-├── data/                    # datasets (fora do git)
-├── runs/                    # saídas de treino (fora do git)
-└── logs/                    # stdout/stderr dos jobs (fora do git)
-```
-
-Ambiente gerenciado por [uv](https://docs.astral.sh/uv/). Os scripts instalam
-o uv se ele não existir — não é preciso `module load python` nem conda.
-
-## Pipeline inicial — execução local
+Antes, confira os tópicos e tipos reais da bag:
 
 ```bash
-./run_local.sh sanity     # preset existente: yolo26n, imgsz=640, 50 épocas
-./run_local.sh            # preset existente: yolo26s, imgsz=960, 150 épocas
+ros2 bag info data/minha_bag
 ```
 
-Da primeira vez ele instala as dependências e baixa/converte o dataset para
-`data/`. Interrompeu no meio? Rode de novo: retoma do `last.pt`.
-
-Presets legados: `sanity`, `main`, `m960`, `p2`, `s1280`.
-Eles não correspondem aos IDs da matriz experimental revisada, e `imgsz`
-escalar não garante entrada retangular. Flags extras passam depois de `--`:
+Na estação de trabalho, abra `ssh -X booster@192.168.0.101` (se necessário,
+`ssh -Y ...` para X11 confiável). Na sessão remota:
 
 ```bash
-./run_local.sh main -- --batch 8 --patience 20
+cd ~/Workspace/hl_vision
+source /opt/ros/$ROS_DISTRO/setup.bash
+source ~/Workspace/hsl-player/install/setup.bash
+export ROS_DOMAIN_ID=87   # domínio LIVRE, diferente do robô em produção
+python3 src/replay.py data/minha_bag \
+  --config ~/Workspace/hsl-player/src/vision/config/vision.yaml \
+  --vision-bin ~/Workspace/hsl-player/install/vision/lib/vision/vision_node \
+  --color-topic /boostercamera/head/rgb \
+  --intrin-topic /boostercamera/head/rgb/camera_info \
+  --pose-topic /head_pose \
+  --rate 0.5
 ```
 
-## Rodando no cluster Apuana (CIn-UFPE)
+O tópico `--color-topic` (Image ou CompressedImage; este último deve conter
+`compressed` no nome) deve existir na bag. Quando informados, `--intrin-topic`
+e `--pose-topic` também devem existir. Para outros
+modelos diferentes do K1, use caminhos **absolutos** em `--det-model` e `--seg-model`. Se o
+`vision_node` estiver em outro local, localize-o em `install/vision/lib/vision/`.
+Use a configuração do mesmo checkout/build do hsl-player. O processo da visão
+executa com `cwd` na raiz desse checkout para resolver paths relativos do YAML.
+
+**Importante:** a bag também precisa conter os insumos de pose do nó (por
+exemplo `/head_pose` ou `/booster_soccer/t_head2base`, conforme a configuração)
+para que as projeções 3D/linhas sejam confiáveis. Sem `CameraInfo`, o nó usa
+intrínsecos estáticos do YAML, que podem não corresponder à gravação. O programa
+não sintetiza esses dados nem altera os timestamps da bag. Use um domínio ROS
+isolado: definir `ROS_DOMAIN_ID` não impede colisões se o mesmo ID estiver em
+uso por outros processos. Isso evita injetar imagens da bag no robô em operação.
+
+## Interface e limites
+
+- RAW: caixas de detecção em amarelo; quando o modelo segmenta, máscaras e
+  caixas de segmentação desenhadas pelo hsl-player são sobrepostas ao mesmo
+  frame. **Segmentos de linha 2D** ajustados geometricamente aparecem em magenta.
+  A máscara e os segmentos são saídas diferentes: um contorno pode ser previsto
+  sem gerar segmento. Se o modelo retornar zero objetos para um frame, nada será
+  sobreposto; na bag maior, a maioria dos frames testados teve zero segmentos.
+  O contador «Máscaras previstas» ajuda a distinguir ausência de predições de
+  erro de transporte. Uma máscara rara permanece visível por até 1 s de tempo
+  da bag para não ser ocultada pelo detector mais rápido.
+  O tópico extra `/booster_camera/segmentation_overlay/compressed` só transporta
+  JPEGs quando a interface assina e há predições; não altera a inferência normal.
+- Segunda imagem: `/booster_camera/preprocess_video`, entrada geométrica e de
+  cor do modelo de **segmentação** (não a entrada do detector). A publicação é
+  ligada numa cópia temporária do YAML, sem alterar os arquivos do hsl-player.
+- Os valores em tela podem ser editados e confirmados com **Aplicar filtros**.
+  Na branch `fix/vision-preprocess` atualizada do hsl-player, a interface envia
+  um parâmetro ROS: o filtro muda entre frames **sem recompilar nem recarregar
+  os modelos**. Com um binário antigo, faz um reinício de compatibilidade. O botão
+  fica desabilitado até um frame pré-processado confirmar a mudança.
+- A bag roda em loop a meia velocidade por padrão; `--rate` altera a velocidade.
+  Em MCAP com fallback Python, a barra mostra posição/duração e número da volta
+  (indicador de reprodução, ainda sem seek). Aceita tanto diretório de bag com
+  um MCAP quanto caminho direto para um arquivo `.mcap`.
+  Se o modelo não acompanhar, mensagens podem ser descartadas (QoS depth 1).
+  Somente câmera, CameraInfo e pose são reproduzidos (nunca comandos do robô ou
+  detecções já gravadas). Nesta versão do hsl-player `save_data=false` causa
+  falha na inicialização; o replay grava aproximadamente 1 frame/s em
+  `~/Workspace/vision_log/`. `runs/replay/vision.log`, `bag.log` e
+  `vision_replay.yaml` ajudam no diagnóstico.
+  Fechar a janela encerra os dois processos iniciados pelo aplicativo.
+
+### Bag maior disponível no robô de testes
+
+`data/alan_teste3_visao.mcap` é um link para a bag já armazenada no robô
+(89 s, aproximadamente 1.079 frames RGB). Ela contém `/booster_soccer/t_head2base`
+mas não `/head_pose`. Use o comando acima substituindo a bag por esse caminho
+e `--pose-topic /booster_soccer/t_head2base`. O replay publica apenas os três
+tópicos escolhidos; os demais dados gravados não são enviados para o robô.
+Feche a interface anterior e abra outra para carregar o código/binário novo.
 
 ```bash
-ssh <user>@apuana.cin.ufpe.br          # login node
-git clone <este repo> && cd hl_vision
-
-./setup_env.sh --alloc --dataset       # monta o ambiente e baixa os dados
-exit                                   # sai da alocação
-sbatch train_yolo26.sbatch             # submete o treino
-squeue -u $USER
-tail -f logs/yolo26-hsl_<jobid>.out
+cd ~/Workspace/hl_vision
+source /opt/ros/humble/setup.bash
+source ~/Workspace/hsl-player/install/setup.bash
+export ROS_DOMAIN_ID=87
+python3 src/replay.py data/alan_teste3_visao.mcap \
+  --config ~/Workspace/hsl-player/src/vision/config/vision.yaml \
+  --vision-bin ~/Workspace/hsl-player/install/vision/lib/vision/vision_node \
+  --color-topic /boostercamera/head/rgb \
+  --intrin-topic /boostercamera/head/rgb/camera_info \
+  --pose-topic /booster_soccer/t_head2base --rate 0.5
 ```
+`--intrin-topic` e `--pose-topic` são opcionais para inspecionar imagem e inferência
+2D. `CameraInfo` atualiza os intrínsecos; sem ele o hsl-player utiliza os valores
+estáticos do YAML. A pose é usada para projeção 3D e geometria dos segmentos:
+sem pose correspondente, as linhas/projeções podem ficar incorretas mesmo que
+a imagem e a inferência 2D continuem aparecendo.
 
-Por que `--alloc`: no Apuana **só as partições `install` e `debug` aceitam
-execução interativa**, e é na `install` que há rede para baixar torch e
-dataset. O script faz o `salloc -p install` e se reexecuta lá dentro.
-
-### Partições
-
-| Partição | Uso |
-|---|---|
-| `short-simple` | maior prioridade (100); bom para os experimentos curtos |
-| `short-complex` | idem, recursos maiores; as `short` limitam 2 GPUs/job |
-| `long-simple` | default do sbatch — 150 épocas não cabem numa `short` |
-| `long-complex` | menor prioridade (25) |
-| `install`, `debug` | únicas interativas |
-| `emergency` | reservada |
-
-GPU se pede com `--gpus=N` (não `--gres`). Trocar partição na submissão:
-
-```bash
-sbatch -p short-simple --time=04:00:00 \
-    --export=ALL,MODEL=yolo26n.pt,IMGSZ=640,EPOCHS=50,NAME=sanity_n640 \
-    train_yolo26.sbatch
-```
-
-O cluster tem 11 RTX 3090 e 5 A100 em 10 nós. Quanto mais recurso você pede,
-menor a prioridade — 1 GPU basta para este dataset (~6k imagens).
-
-### Dados fora do home
-
-O home é NFS com cota e o dataset descomprimido passa de 10 GB. Se houver
-scratch disponível:
-
-```bash
-export HSL_DATA_DIR=/scratch/$USER/hl_vision_data
-./setup_env.sh --alloc --dataset
-sbatch train_yolo26.sbatch     # o sbatch respeita a mesma variável
-```
-
-## Notas
-
-O `--cache ram` do sbatch depende dos 48 G reservados no job; localmente o
-`run_local.sh` usa `--cache disk`, porque o dataset descomprimido não cabe na
-RAM de um desktop.
-
-O script solicita export ONNX ao fim de um treino novo; o caminho atual de
-resume retorna antes dessa etapa. **Construir e validar TensorRT no ambiente-alvo
-compatível do robô**, confirmando GPU, JetPack, CUDA e TensorRT. O modelo exato
-da GPU do T1 ainda não foi verificado; os engines existentes não devem ser
-presumidos portáveis para outra GPU/versão.
-
-Documentação do cluster: <https://apuana.cin.ufpe.br> ·
-[helpdesk](https://helpdesk.cin.ufpe.br/servicos/cluster-apuana) ·
-`cluster.apuana-l@cin.ufpe.br`
+Estrutura: `src/` implementação, `docs/` relatórios históricos, `data/` bags
+(ignoradas pelo Git). Teste sem ROS: `python3 -m unittest discover -s tests -v`.

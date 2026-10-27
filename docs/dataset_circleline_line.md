@@ -1,4 +1,4 @@
-# Avaliação CircleLine / Line
+# Avaliação de linhas (classe `line`)
 
 ## Conjunto preparado
 
@@ -14,14 +14,14 @@ As máscaras aqui são adaptações rasterizadas/remapeadas das anotações orig
 
 | Origem | Classe do manifesto / ID do modelo-alvo | Pixel na máscara |
 |---|---|---|
-| `centercircle` | `CircleLine` / 0 | 1 |
-| `line` | `Line` / 1 | 2 |
+| `centercircle` | `line` / 0 | 1 |
+| `line` | `line` / 0 | 1 |
 | fundo, bola, robô, gol | fundo | 0 |
-| `penaltycross` ou sobreposição ambígua círculo/linha | ignorar | 255 |
+| `penaltycross` | ignorar | 255 |
 
-A atribuição `centercircle → CircleLine` é a hipótese semântica adotada; confirme-a
-com o treinamento dos pesos. Marca de pênalti não é classificada arbitrariamente
-como Line. Objetos anotados têm prioridade sobre tinta ocluída. Polígonos usam
+A atribuição `centercircle → line` une a pintura do círculo central às linhas de
+campo, inclusive nas regiões de sobreposição. Marca de pênalti não é classificada
+arbitrariamente como linha. Objetos anotados têm prioridade sobre tinta ocluída. Polígonos usam
 arredondamento e `cv2.fillPoly`, seguindo o exemplo oficial. Imagens e máscaras
 permanecem em **640×480**, sem crop, resize, realce ou augmentation.
 Contornos originais com um ou dois pontos são preservados: representam também
@@ -41,8 +41,7 @@ não são considerados completos. Reexecutar regenera as máscaras e o manifesto
 - `Data/raw/naodevils-v36/`: JSON original e imagens.
 - `Data/eval/naodevils-v36-manual-val/dataset.json`: manifesto pronto para o runner.
 - `masks/`: PNGs grayscale uint8.
-- `overlays/`: uma sobreposição por imagem; magenta = CircleLine, verde = Line,
-  laranja = ignorar.
+- `overlays/`: uma sobreposição por imagem; verde = line, laranja = ignorar.
 - `contact_sheet.jpg`: amostra distribuída pelo conjunto, para inspeção visual.
 - `provenance.json`: versão, mapeamento, hashes, contagens e presença de classes.
 
@@ -52,8 +51,9 @@ necessário baixar novamente. Dados e saídas permanecem fora do Git.
 ## Executar posteriormente
 
 Preencha `config/evaluation/models.local.json` a partir do exemplo existente.
-Confirme a ordem das classes nos pesos: `class_map={"0":0,"1":1}` só vale quando
-o modelo usa `0=CircleLine`, `1=Line`. Se a ordem for inversa, inverta o mapeamento.
+Confirme a ordem das classes nos pesos: para um modelo com classe única de linhas,
+use `class_map={"0":0}`. Para um modelo que separa círculo e linha, mapeie ambas
+as classes para `line` com `class_map={"0":0,"1":0}`.
 
 ```bash
 .venv/bin/python tools/evaluate.py run \
@@ -67,15 +67,13 @@ descritos em [avaliacao_offline.md](avaliacao_offline.md).
 
 **Verificação dos pesos locais:** os metadados de
 `Models/sim_data_seg_0126.onnx` declaram `{0: 'field_line'}` e entrada 320×320.
-Esse modelo não distingue CircleLine de Line. Não mapeie sua classe única para
-Line neste benchmark: isso daria uma comparação semanticamente incorreta. Ele
-precisa de uma avaliação adicional com união das marcações ou de pesos de duas
-classes. A taxonomia dos engines TensorRT ainda precisa ser confirmada.
+Esse modelo não distingue círculo de linha, o que é compatível com a classe única
+do manifesto atual, desde que `field_line` inclua ambas as marcações. A taxonomia
+dos engines TensorRT ainda precisa ser confirmada.
 
 ## Outras fontes
 
-TORSO-21 e SoS possuem linhas, mas a pesquisa não confirmou uma separação de
-CircleLine e Line nas máscaras. Não inferimos a classe pela curvatura aparente:
-perspectiva, distorção e oclusão tornam essa heurística inadequada para ground
-truth. Esses dados exigem reanotação ou um benchmark separado de união das linhas.
+TORSO-21 e SoS possuem linhas, mas a pesquisa não confirmou a compatibilidade
+de suas máscaras com a união de linhas e círculo central usada aqui. Confirme a
+taxonomia e as regiões ignoradas antes de adicioná-los ao benchmark.
 LARI permanece pendente de acesso e confirmação das categorias.

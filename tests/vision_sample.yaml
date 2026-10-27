@@ -1,0 +1,15 @@
+segmentation_model:
+  line_preprocessing:
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid_size: [8, 8]
+    white_enhancement:
+      enabled: false
+      min_value: 140
+      max_saturation: 110
+      strength: 0.9
+      protect_green: true
+      max_excess_green: 45
+publish_preprocess_video: false
+use_depth: true
